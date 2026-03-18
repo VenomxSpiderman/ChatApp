@@ -1,0 +1,312 @@
+doctype html
+html(lang="en")
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1.0")
+    title Multi-Client Chat
+    style.
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; height: 100vh; overflow: hidden; }
+
+      #login-screen {
+        position: fixed; inset: 0; z-index: 100;
+        background: linear-gradient(135deg, #279153, #2c258f);
+        display: flex; justify-content: center; align-items: center;
+      }
+      .login-card {
+        background: white; padding: 2rem; border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25); width: 90%; max-width: 340px; text-align: center;
+      }
+      .login-card h2 { margin-bottom: 1.5rem; color: #1a202c; }
+      .login-card input {
+        width: 100%; padding: 10px 14px; margin-bottom: 1rem;
+        border: 1px solid #cbd5e0; border-radius: 8px; font-size: 0.95rem; outline: none;
+      }
+      .login-card input:focus { border-color: #667eea; }
+      .login-card button {
+        width: 100%; padding: 11px; background: #667eea; color: white;
+        border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.95rem;
+      }
+      .login-card button:hover { background: #5a67d8; }
+
+      #chat-container { display: none; height: 100vh; }
+      .layout { display: flex; height: 100%; }
+
+      .sidebar {
+        width: 200px; flex-shrink: 0; background: #1a202c; color: #e2e8f0;
+        display: flex; flex-direction: column;
+      }
+
+      .tab-bar { display: flex; border-bottom: 1px solid #2d3748; }
+      .tab-btn {
+        flex: 1; padding: 12px 0; background: none; border: none; color: #718096;
+        font-size: 0.72rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+        cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+        transition: color 0.15s;
+      }
+      .tab-btn.active { color: #667eea; border-bottom-color: #667eea; }
+      .tab-btn:hover:not(.active) { color: #a0aec0; }
+
+      .tab-panel { display: none; flex-direction: column; flex-grow: 1; overflow: hidden; }
+      .tab-panel.active { display: flex; }
+
+      .panel-scroll { overflow-y: auto; flex-grow: 1; padding: 8px; }
+
+      .room-item {
+        padding: 7px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 2px;
+        font-size: 0.87rem; color: #a0aec0; display: flex; align-items: center; gap: 6px;
+      }
+      .room-item:hover { background: #2d3748; color: #e2e8f0; }
+      .room-item.active { background: #667eea33; color: #667eea; font-weight: 600; }
+      .room-item .join-btn {
+        margin-left: auto; font-size: 0.68rem; background: #667eea; color: white;
+        border: none; border-radius: 4px; padding: 2px 7px; cursor: pointer;
+        opacity: 0; pointer-events: none;
+      }
+      .room-item:hover .join-btn { opacity: 1; pointer-events: auto; }
+
+      #user-list { list-style: none; padding: 8px; }
+      #user-list li {
+        padding: 6px 10px; font-size: 0.87rem; color: #a0aec0;
+        display: flex; align-items: center; gap: 6px; border-radius: 6px;
+      }
+      #user-list li::before {
+        content: ''; width: 7px; height: 7px; border-radius: 50%;
+        background: #48bb78; flex-shrink: 0;
+      }
+      #user-list li.me { color: #fc8181; font-weight: 600; }
+      #user-list li.me::before { background: #fc8181; }
+
+      .commands-hint {
+        padding: 10px 12px; border-top: 1px solid #2d3748;
+        font-size: 0.72rem; color: #718096;
+      }
+      .commands-hint code { display: block; margin-top: 3px; color: #a0aec0; }
+
+      .main-chat { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
+      .chat-header {
+        padding: 13px 20px; background: white; border-bottom: 1px solid #e2e8f0;
+        font-weight: 700; color: #2d3748; font-size: 0.97rem;
+      }
+      .chat-header span { color: #667eea; }
+
+      #messages {
+        flex-grow: 1; padding: 18px; overflow-y: auto; list-style: none;
+        background: #f7fafc; display: flex; flex-direction: column; gap: 6px;
+      }
+      #messages li {
+        padding: 9px 13px; border-radius: 12px;
+        max-width: 70%; word-wrap: break-word; font-size: 0.89rem; line-height: 1.45;
+      }
+      .msg-system {
+        background: #fff3cd; color: #856404; text-align: center; font-size: 0.76rem;
+        border-radius: 20px; max-width: 90% !important; padding: 5px 14px !important; align-self: center;
+      }
+      .msg-own { background: #667eea; color: white; align-self: flex-end; margin-left: auto; }
+      .msg-other { background: #edf2f7; color: #2d3748; }
+      .msg-private { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+      .msg-label { font-size: 0.71rem; font-weight: 700; margin-bottom: 3px; opacity: 0.7; }
+      .chat-image { max-width: 100%; border-radius: 8px; margin-top: 5px; display: block; }
+
+      .input-area {
+        padding: 13px 16px; background: white; border-top: 1px solid #e2e8f0;
+        display: flex; gap: 8px; align-items: center;
+      }
+      #msg-input {
+        flex-grow: 1; padding: 9px 16px; border: 1px solid #cbd5e0;
+        border-radius: 22px; outline: none; font-size: 0.9rem;
+      }
+      #msg-input:focus { border-color: #667eea; }
+      .send-btn {
+        padding: 9px 20px; background: #667eea; color: white;
+        border: none; border-radius: 22px; cursor: pointer; font-weight: 600; font-size: 0.88rem;
+      }
+      .send-btn:hover { background: #5a67d8; }
+      #image-input { display: none; }
+      .upload-label { font-size: 1.25em; color: #718096; cursor: pointer; padding: 2px 4px; }
+
+      #history-modal {
+        display: none; position: fixed; inset: 0;
+        background: rgba(0,0,0,0.5); z-index: 200;
+        justify-content: center; align-items: center;
+      }
+      #history-modal.open { display: flex; }
+      .history-card {
+        background: white; border-radius: 12px; width: 90%; max-width: 560px;
+        max-height: 75vh; display: flex; flex-direction: column;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;
+      }
+      .history-card-header {
+        padding: 14px 18px; background: #667eea; color: white;
+        display: flex; justify-content: space-between; align-items: center;
+      }
+      .history-card-header h3 { font-size: 0.97rem; }
+      .close-btn { background: none; border: none; color: white; font-size: 1.4rem; cursor: pointer; }
+      .history-msgs {
+        overflow-y: auto; padding: 14px 18px; flex-grow: 1;
+        display: flex; flex-direction: column; gap: 8px; background: #f7fafc;
+      }
+      .history-msg { background: #edf2f7; border-radius: 8px; padding: 8px 12px; font-size: 0.84rem; color: #2d3748; }
+      .history-msg .h-user { font-weight: 700; color: #667eea; font-size: 0.76rem; margin-bottom: 2px; }
+      .history-msg .h-time { float: right; font-size: 0.71rem; color: #a0aec0; }
+      .history-msg img { max-width: 100%; border-radius: 6px; margin-top: 5px; display: block; }
+      .empty-note { color: #a0aec0; text-align: center; font-size: 0.87rem; margin: auto; }
+
+  body
+    #login-screen
+      .login-card
+        h2 Join Chat
+        input#username-input(type="text" placeholder="Choose a username" onkeypress="if(event.key==='Enter')login()")
+        button(onclick="login()") Enter Chat
+
+    #chat-container
+      .layout
+        .sidebar
+          .tab-bar
+            button.tab-btn.active(onclick="switchTab('rooms')") Rooms
+            button.tab-btn(onclick="switchTab('online')") Online
+
+          .tab-panel.active#tab-rooms
+            .panel-scroll#room-list
+
+          .tab-panel#tab-online
+            ul#user-list
+            .commands-hint
+              | Commands:
+              code /join [room]
+              code /msg [user] [text]
+
+        .main-chat
+          .chat-header # &nbsp;
+            span#room-label general
+          ul#messages
+          .input-area
+            label.upload-label(for="image-input") [img]
+            input#image-input(type="file" accept="image/*" onchange="sendImage()")
+            input#msg-input(type="text" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMessage()")
+            button.send-btn(onclick="sendMessage()") Send
+
+    #history-modal
+      .history-card
+        .history-card-header
+          h3#history-title Room History
+          button.close-btn(onclick="closeHistory()") x
+        .history-msgs#history-msgs
+
+    script(src="/socket.io/socket.io.js")
+    script.
+      const socket = io();
+      let myUsername = '';
+      let myRoom = 'general';
+
+      const esc = str => String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+      function login() {
+        const name = document.getElementById('username-input').value.trim();
+        if (!name) return;
+        myUsername = name;
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('chat-container').style.display = 'block';
+        socket.emit('login', name);
+      }
+
+      function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach((btn, i) => btn.classList.toggle('active', (i === 0) === (tab === 'rooms')));
+        document.getElementById('tab-rooms').classList.toggle('active', tab === 'rooms');
+        document.getElementById('tab-online').classList.toggle('active', tab === 'online');
+      }
+
+      function sendMessage(isConfirmed = false, forced = null) {
+        const input = document.getElementById('msg-input');
+        const message = forced || input.value.trim();
+        if (!message) return;
+        socket.emit('chat_message', { message, type: 'text', isConfirmed });
+        if (!forced) input.value = '';
+      }
+
+      function sendImage() {
+        const file = document.getElementById('image-input').files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => socket.emit('chat_message', { message: e.target.result, type: 'image' });
+        reader.readAsDataURL(file);
+        document.getElementById('image-input').value = '';
+      }
+
+      function joinRoom(roomName) {
+        if (roomName === myRoom) return;
+        socket.emit('chat_message', { message: `/join ${roomName}`, type: 'text', isConfirmed: false });
+        myRoom = roomName;
+        document.getElementById('room-label').textContent = roomName;
+        document.getElementById('messages').innerHTML = '';
+      }
+
+      socket.on('room_list', (rooms) => {
+        document.getElementById('room-list').innerHTML = rooms.map(room => `
+          <div class="room-item ${room === myRoom ? 'active' : ''}" onclick="socket.emit('view_history','${esc(room)}')">
+            <span>#</span><span>${esc(room)}</span>
+            <button class="join-btn" onclick="event.stopPropagation();joinRoom('${esc(room)}')">Join</button>
+          </div>`).join('');
+      });
+
+      socket.on('update_users', (users) => {
+        document.getElementById('user-list').innerHTML = users.map(u =>
+          `<li class="${u === myUsername ? 'me' : ''}">${esc(u)}</li>`
+        ).join('');
+      });
+
+      socket.on('room_history', ({ room, messages }) => {
+        myRoom = room;
+        document.getElementById('room-label').textContent = room;
+        document.getElementById('messages').innerHTML = '';
+
+        if (!messages.length) {
+          addSystem(`-- No previous messages in #${room} --`);
+          addSystem('-- Live --');
+          return;
+        }
+
+        addSystem(`-- History for #${room} --`);
+        messages.forEach(m => appendMsg(m.user, m.message, m.type, false));
+        addSystem('-- Live --');
+      });
+
+      socket.on('history_peek', ({ room, messages }) => {
+        document.getElementById('history-title').textContent = `#${room} - History`;
+        document.getElementById('history-msgs').innerHTML = messages.length
+          ? messages.map(m => `
+              <div class="history-msg">
+                <div class="h-user">${esc(m.user)}<span class="h-time">${new Date(m.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>
+                ${m.type === 'image' ? `<img src="${m.message}">` : esc(m.message)}
+              </div>`).join('')
+          : '<p class="empty-note">No messages yet.</p>';
+        document.getElementById('history-modal').classList.add('open');
+      });
+
+      socket.on('chat_message', ({ user, message, type, isPrivate }) => appendMsg(user, message, type, isPrivate));
+      socket.on('system_message', msg => addSystem(msg));
+      socket.on('otp_warning', ({ originalMessage, warning }) => {
+        if (confirm(`${warning}\n\n"${originalMessage}"`)) sendMessage(true, originalMessage);
+      });
+
+      function appendMsg(user, message, type, isPrivate) {
+        const list = document.getElementById('messages');
+        const li = document.createElement('li');
+        li.className = isPrivate ? 'msg-private' : user === myUsername ? 'msg-own' : 'msg-other';
+        const label = (user !== myUsername || isPrivate) ? `<div class="msg-label">${esc(user)}</div>` : '';
+        li.innerHTML = label + (type === 'image' ? `<img src="${message}" class="chat-image">` : esc(message));
+        list.appendChild(li);
+        list.scrollTop = list.scrollHeight;
+      }
+
+      function addSystem(msg) {
+        const list = document.getElementById('messages');
+        const li = document.createElement('li');
+        li.className = 'msg-system';
+        li.textContent = msg;
+        list.appendChild(li);
+        list.scrollTop = list.scrollHeight;
+      }
+
+      function closeHistory() { document.getElementById('history-modal').classList.remove('open'); }
+      document.getElementById('history-modal').addEventListener('click', e => { if (e.target.id === 'history-modal') closeHistory(); });
